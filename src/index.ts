@@ -7,9 +7,12 @@
 
 import cors from "cors";
 import express, { Application } from "express";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer } from "ws";
+import { v4 as uuidv4 } from 'uuid'
 
 import authRouter from "./routes/auth";
+import { WsClient } from "./misc/types";
+import { getHeaders } from "./helpers/parseUrl";
 
 const app: Application = express();
 
@@ -35,24 +38,26 @@ server.on("error", (error) => {
     throw new Error(`${PORT} is in use...`);
 });
 
-wss.on("connection", (ws) => {
+wss.on("connection", (ws : WsClient, req) => {
+
   console.log("Client conncted");
 
-  ws.on("message", (msg, isBinary) => {
-    wss.clients.forEach(function (client) {
-      if (client !== ws && client.readyState === WebSocket.OPEN)
-        client.send(msg, { binary: isBinary });
-    });
-  });
+  const { userId } = getHeaders(req);
+  
+  const connection_id = uuidv4();
+
+   
+
+
 });
 
 server.on("upgrade", (req, socket, head) => {
 
-  if(req.url === "/chat")
-    
+  const parseURL = new URL(req.url!, `http://${req.headers.host}`);
+
+  if (req.url?.includes("/chat"))
     wss.handleUpgrade(req, socket, head, function (ws) {
       wss.emit("connection", ws, req);
     });
 
-  
 });
