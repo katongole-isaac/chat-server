@@ -7,12 +7,13 @@
 
 import cors from "cors";
 import express, { Application } from "express";
+import { DecodedIdToken } from "firebase-admin/auth";
 import { WebSocketServer } from "ws";
-import { v4 as uuidv4 } from 'uuid'
+import { v4 as uuidv4 } from "uuid";
 
 import authRouter from "./routes/auth";
 import { WsClient } from "./misc/types";
-import { getHeaders } from "./helpers/parseUrl";
+import helpers, { User } from "./helpers";
 
 const app: Application = express();
 
@@ -38,17 +39,49 @@ server.on("error", (error) => {
     throw new Error(`${PORT} is in use...`);
 });
 
-wss.on("connection", (ws : WsClient, req) => {
-
+// event fired upon handshake completion
+wss.on("connection", async (ws: WsClient, req) => {
   console.log("Client conncted");
 
-  const { userId } = getHeaders(req);
+  const { token } = helpers.getHeaders(req);
+
+  const decoded: DecodedIdToken = await helpers.decodeToken(token);
+
+  const { email, uid } = decoded;
+
+  const connectionId = uuidv4();
+
+  let user = (await helpers.getUser(uid)) as User;
+
+  // if the user doesn't exists in the DB
+  // create/save the user
+  if (!user) {
+    const data: User = {
+      connectionId,
+      email: email as string,
+      userId: uid,
+      online: true,
+    };
+
+    await helpers.saveUser(data);
+
+    user = data;
+  } else {
+    // if the user exists, update the connection_id and set online to true
+    await helpers.updateUser({
+      connectionId,
+      online: true,
+    });
+  }
+
+  // set user initial on ws
+  ws.userId = user.userId;
+  ws.connectionId = user.connectionId;
+
+  // when connections is established
+  ws.on("open", () => {});
+
   
-  const connection_id = uuidv4();
-
-   
-
-
 });
 
 server.on("upgrade", (req, socket, head) => {
