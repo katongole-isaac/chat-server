@@ -7,16 +7,15 @@ import { IncomingMessage } from "http";
 import { firebaseAuth, firestoreDB } from "./lib/firebase";
 
 export type User = {
-  userId: string,
+  userId: string;
   connectionId: string;
-  email : string;
+  email: string;
   online: boolean;
-}
-
+};
 
 
 // container
-const helpers: { [key: string]: Function } = {};
+const helpers: Record<string, Function> = {};
 
 // getting query params
 helpers.getHeaders = function (req: IncomingMessage) {
@@ -26,12 +25,9 @@ helpers.getHeaders = function (req: IncomingMessage) {
   const userId = parseURL.searchParams.get("userId") as string;
 
   return {
-
     token,
     userId,
-
   };
-
 };
 
 // decoding jwt firebase token
@@ -46,40 +42,31 @@ helpers.decodeToken = async function (token: string) {
 };
 
 // saving the user
-helpers.saveUser = async function (
-  userId: string,
-  data: User
-) {
-
-  const docRef = firestoreDB.collection("users").doc(userId);
-
+helpers.saveUser = async function (userId: string, data: User) {
   try {
-    
+    const docRef = firestoreDB.collection("users").doc(userId);
+
     await docRef.set(data);
 
     return true;
-
   } catch (error) {
-
     console.log("[Saving user]: ", error);
 
     return false;
   }
 };
 
+
 // getting user data
 helpers.getUser = async function (userId: string) {
-
-  const userCollection = firestoreDB.collection("users");
-
   try {
+    const docRef = firestoreDB.collection("users").doc(userId);
 
-    const docRef = userCollection.doc(userId);
     const doc = await docRef.get();
 
     if (!doc.exists) return null;
 
-    return doc;
+    return doc.data();
 
   } catch (error) {
     console.log("[Getting user]: ", error);
@@ -88,14 +75,13 @@ helpers.getUser = async function (userId: string) {
   }
 };
 
-// updating user 
-helpers.updateUser = async function (userId:string, data: Partial<User> ) {
-
-  const docRef = firestoreDB.doc(`users/${userId}`);
-  
+// updating user
+helpers.updateUser = async function (userId: string, data: Partial<User>) {
   try {
+    const docRef = firestoreDB.doc(`users/${userId}`);
 
-    await docRef.update({...data});
+    await docRef.update({ ...data });
+
     return true;
 
   } catch (error) {
@@ -103,9 +89,25 @@ helpers.updateUser = async function (userId:string, data: Partial<User> ) {
     console.log(`[Updating user]: ${error}`);
 
     return false;
-    
   }
+};
 
+
+// Json stringfy
+helpers.stringify = function(data : object) {
+  try {
+
+    return JSON.stringify(data);
+
+  } catch (error) {
+
+      console.log(`[Failed to stringfy JSON]: ${error}`);
+
+      return {}
+  }
 }
+
+
+
 
 export default helpers;

@@ -12,7 +12,7 @@ import { WebSocketServer } from "ws";
 import { v4 as uuidv4 } from "uuid";
 
 import authRouter from "./routes/auth";
-import { WsClient } from "./misc/types";
+import { MessageFormat, WsClient } from "./misc/types";
 import helpers, { User } from "./helpers";
 
 const app: Application = express();
@@ -41,7 +41,23 @@ server.on("error", (error) => {
 
 // event fired upon handshake completion
 wss.on("connection", async (ws: WsClient, req) => {
-  console.log("Client conncted");
+  console.log("Client connected");
+
+  // used to send updates on the user online status
+  ws.on("message", (data) => {
+    const message = JSON.parse(data.toString()) as MessageFormat;
+    if (message.type === "login") {
+      
+      const response: MessageFormat = {
+        type: "login",
+        params: {
+          isOnline: true,
+        },
+      };
+
+      ws.send(JSON.stringify(response));
+    }
+  });
 
   const { token } = helpers.getHeaders(req);
 
@@ -51,7 +67,7 @@ wss.on("connection", async (ws: WsClient, req) => {
 
   const connectionId = uuidv4();
 
-  let user = (await helpers.getUser(uid)) as User;
+  let user = <User>await helpers.getUser(uid);
 
   // if the user doesn't exists in the DB
   // create/save the user
@@ -63,30 +79,48 @@ wss.on("connection", async (ws: WsClient, req) => {
       online: true,
     };
 
-    await helpers.saveUser(data);
+    await helpers.saveUser(data.userId, data);
 
     user = data;
   } else {
     // if the user exists, update the connection_id and set online to true
-    await helpers.updateUser({
+    await helpers.updateUser(user.userId, {
       connectionId,
       online: true,
     });
   }
 
-  // set user initial on ws
+  // set user id and connectionId initials on ws, so that we can recognize them
   ws.userId = user.userId;
   ws.connectionId = user.connectionId;
 
-  // when connections is established
-  ws.on("open", () => {});
+  // you can send connectionId to the user.
+  // user can store it in the sessionstorage
+  ws.send(helpers.stringify({ connectionId }));
 
-  
+  // upon closing the websocket, update user [online, connectionId]
+  // then reset ws.userId and ws.connectioId to null
+  ws.on("close", async (code, reason) => {
+    console.log("Client disconnected !");
+
+    await helpers.updateUser(user.userId, {
+      connectionId: null,
+      online: false,
+    });
+
+    ws.userId = null;
+    ws.connectionId = null;
+  });
+
+
+  ws.on("message", (data) => {
+    console.log(`Data: ${data} `);
+  });
 });
 
 server.on("upgrade", (req, socket, head) => {
 
-  const parseURL = new URL(req.url!, `http://${req.headers.host}`);
+  // const parseURL = new URL(req.url!, `http://${req.headers.host}`);
 
   if (req.url?.includes("/chat"))
     wss.handleUpgrade(req, socket, head, function (ws) {
