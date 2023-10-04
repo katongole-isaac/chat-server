@@ -21,7 +21,7 @@ router.get("/", async (req, res) => {
     
   } catch (error) {
     // if the token is invalid
-    res.status(301).send({ redirectUrl: "/login" });
+    res.status(301).send({ type: "error", redirectUrl: "/login" });
   }
 });
 

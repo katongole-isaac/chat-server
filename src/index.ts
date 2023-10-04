@@ -41,13 +41,47 @@ server.on("error", (error) => {
 
 // event fired upon handshake completion
 wss.on("connection", async (ws: WsClient, req) => {
-  console.log("Client connected");
+  const { token } = helpers.getHeaders(req);
+
+  const decoded: DecodedIdToken = await helpers.decodeToken(token);
+
+  // reply to the user with an error
+  // and close the connection
+  // if invalid token
+  if (!decoded) {
+    const errorMsg: MessageFormat = {
+      type: "error",
+      params: {
+        message: "Invalid or expired token",
+      },
+    };
+
+    ws.send(JSON.stringify(errorMsg));
+    ws.close();
+
+    return;
+  }
+
+  const { email, uid } = decoded;
+
+  const connectionId = uuidv4();
+
 
   // used to send updates on the user online status
-  ws.on("message", (data) => {
+  ws.on("message", async (data) => {
     const message = JSON.parse(data.toString()) as MessageFormat;
+
+   let _user = <User>await helpers.getUser(uid);
+
+   // before sending online status to the client
+   // check if is already online
+   if ((_user.online && _user.connectionId)) return ws.close();
+   
+
     if (message.type === "login") {
-      
+
+      console.log("Client connected");
+
       const response: MessageFormat = {
         type: "login",
         params: {
@@ -59,13 +93,6 @@ wss.on("connection", async (ws: WsClient, req) => {
     }
   });
 
-  const { token } = helpers.getHeaders(req);
-
-  const decoded: DecodedIdToken = await helpers.decodeToken(token);
-
-  const { email, uid } = decoded;
-
-  const connectionId = uuidv4();
 
   let user = <User>await helpers.getUser(uid);
 
@@ -83,20 +110,28 @@ wss.on("connection", async (ws: WsClient, req) => {
 
     user = data;
   } else {
-    // if the user exists, update the connection_id and set online to true
-    await helpers.updateUser(user.userId, {
-      connectionId,
-      online: true,
-    });
+
+    // update only if the user was offline or has just joined
+    if (!(user.online && user.connectionId))
+      // if the user exists, update the connection_id and set online to true
+      await helpers.updateUser(user.userId, {
+        connectionId,
+        online: true,
+      });
+
   }
 
-  // set user id and connectionId initials on ws, so that we can recognize them
-  ws.userId = user.userId;
-  ws.connectionId = user.connectionId;
+  // update only if the user was offline or has just joined
+  if (!(user.online && user.connectionId)) {
+    
+    // set user id and connectionId initials on ws, so that we can recognize them
+    ws.userId = user.userId;
+    ws.connectionId = user.connectionId;
 
-  // you can send connectionId to the user.
-  // user can store it in the sessionstorage
-  ws.send(helpers.stringify({ connectionId }));
+    // you can send connectionId to the user.
+    // user can store it in the sessionstorage
+    ws.send(JSON.stringify({ connectionId }));
+  }
 
   // upon closing the websocket, update user [online, connectionId]
   // then reset ws.userId and ws.connectioId to null
@@ -112,9 +147,8 @@ wss.on("connection", async (ws: WsClient, req) => {
     ws.connectionId = null;
   });
 
-
   ws.on("message", (data) => {
-    console.log(`Data: ${data} `);
+    console.log(`Data=>: ${data} `);
   });
 });
 

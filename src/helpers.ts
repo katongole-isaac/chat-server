@@ -50,6 +50,7 @@ helpers.saveUser = async function (userId: string, data: User) {
 
     return true;
   } catch (error) {
+    
     console.log("[Saving user]: ", error);
 
     return false;
