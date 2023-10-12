@@ -5,6 +5,7 @@
 import { IncomingMessage } from "http";
 
 import { firebaseAuth, firestoreDB } from "./lib/firebase";
+import { CommandTypes, MessageFormat, WsClient } from "./misc/types";
 
 export type User = {
   userId: string;
@@ -12,7 +13,6 @@ export type User = {
   email: string;
   online: boolean;
 };
-
 
 // container
 const helpers: Record<string, Function> = {};
@@ -29,6 +29,20 @@ helpers.getHeaders = function (req: IncomingMessage) {
     userId,
   };
 };
+
+// executed on login
+helpers.login = function (ws: WsClient) {
+  console.log(`client connected`);
+  const response: MessageFormat = {
+    type: CommandTypes.LOGIN,
+    params: {
+      isOnline: true,
+    },
+  };
+
+  ws.send(JSON.stringify(response));
+};
+
 
 // decoding jwt firebase token
 helpers.decodeToken = async function (token: string) {

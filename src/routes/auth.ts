@@ -12,6 +12,7 @@ const router = express.Router();
 
 router.get("/", async (req, res) => {
 
+
   const token = req.headers["x-auth-token"] as string ;
 
   try {
@@ -20,6 +21,7 @@ router.get("/", async (req, res) => {
     res.send({ message: "ok" });
     
   } catch (error) {
+    console.log(error);
     // if the token is invalid
     res.status(301).send({ type: "error", redirectUrl: "/login" });
   }

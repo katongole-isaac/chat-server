@@ -12,8 +12,9 @@ import { WebSocketServer } from "ws";
 import { v4 as uuidv4 } from "uuid";
 
 import authRouter from "./routes/auth";
-import { MessageFormat, WsClient } from "./misc/types";
+import { CommandTypes, MessageFormat, WsClient } from "./misc/types";
 import helpers, { User } from "./helpers";
+import rooms from "./lib/rooms";
 
 const app: Application = express();
 
@@ -50,7 +51,7 @@ wss.on("connection", async (ws: WsClient, req) => {
   // if invalid token
   if (!decoded) {
     const errorMsg: MessageFormat = {
-      type: "error",
+      type: CommandTypes.ERROR_ROOM,
       params: {
         message: "Invalid or expired token",
       },
@@ -66,33 +67,36 @@ wss.on("connection", async (ws: WsClient, req) => {
 
   const connectionId = uuidv4();
 
-
   // used to send updates on the user online status
   ws.on("message", async (data) => {
     const message = JSON.parse(data.toString()) as MessageFormat;
 
-   let _user = <User>await helpers.getUser(uid);
+    let _user = <User>await helpers.getUser(uid);
 
-   // before sending online status to the client
-   // check if is already online
-   if ((_user.online && _user.connectionId)) return ws.close();
-   
+    // before sending online status to the client
+    // check if is already online
+    // if (_user.online && _user.connectionId) return ws.close();
 
-    if (message.type === "login") {
+    switch (message.type) {
+      case CommandTypes.CREATE_ROOM:
+       return rooms.create(message.params, ws);
 
-      console.log("Client connected");
+      case CommandTypes.JOIN_ROOM:
+        break;
 
-      const response: MessageFormat = {
-        type: "login",
-        params: {
-          isOnline: true,
-        },
-      };
+      case CommandTypes.LEAVE_ROOM:
+        break;
 
-      ws.send(JSON.stringify(response));
+      case CommandTypes.GET_ROOMS_INFO:
+        return rooms.getRoomsInfo(message.params, ws);
+
+      case CommandTypes.LOGIN:
+        return helpers.login(ws);
+
+      default:
+        console.log("Invalid command type");
     }
   });
-
 
   let user = <User>await helpers.getUser(uid);
 
@@ -110,7 +114,6 @@ wss.on("connection", async (ws: WsClient, req) => {
 
     user = data;
   } else {
-
     // update only if the user was offline or has just joined
     if (!(user.online && user.connectionId))
       // if the user exists, update the connection_id and set online to true
@@ -118,12 +121,10 @@ wss.on("connection", async (ws: WsClient, req) => {
         connectionId,
         online: true,
       });
-
   }
 
   // update only if the user was offline or has just joined
   if (!(user.online && user.connectionId)) {
-    
     // set user id and connectionId initials on ws, so that we can recognize them
     ws.userId = user.userId;
     ws.connectionId = user.connectionId;
