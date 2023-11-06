@@ -21,10 +21,19 @@ router.get("/", async (req, res) => {
     res.send({ message: "ok" });
     
   } catch (error) {
+    
     console.log(error);
     // if the token is invalid
     res.status(301).send({ type: "error", redirectUrl: "/login" });
   }
+});
+
+router.post("/", async (req, res) => {
+
+  const { email } = req.body as { email: string };
+  
+
+
 });
 
 export default router;

@@ -4,7 +4,6 @@
  */
 
 
-
 import cors from "cors";
 import express, { Application } from "express";
 import { DecodedIdToken } from "firebase-admin/auth";
@@ -14,7 +13,6 @@ import { v4 as uuidv4 } from "uuid";
 import authRouter from "./routes/auth";
 import { CommandTypes, MessageFormat, WsClient } from "./misc/types";
 import helpers, { User } from "./helpers";
-import rooms from "./lib/rooms";
 
 const app: Application = express();
 
@@ -27,6 +25,8 @@ app.use(
   cors({
     origin: "*",
     allowedHeaders: ["x-auth-token"],
+    
+    credentials: true,
   })
 );
 app.use("/auth", authRouter);
