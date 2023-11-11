@@ -2,12 +2,14 @@
  * Parse Urls
  *
  */
+import internal from "node:stream";
+import { IncomingMessage } from "node:http";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
-import Helpers from "./types/helpers";
 import { User } from "./types/users";
+import Helpers from "./types/helpers";
 import { firebaseAuth, firestoreDB } from "./lib/firebase";
 import FriendRequest, { NewFriendRequest } from "./types/friend_request";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 // decoding jwt firebase token
 const decodeToken = async function (token: string) {
@@ -114,6 +116,39 @@ const getFriendRequest = async (id: string) => {
   }
 };
 
+const deleteFriendRequest = async (id: string) => {
+  try {
+    const docRef = firestoreDB.collection("friend_request").doc(id);
+
+    await docRef.delete();
+
+    return true;
+  } catch (error) {
+    console.log(`[Deleting Friend Request]: ${error}`);
+
+    return false;
+  }
+};
+
+const socketAuthentication = async(req: IncomingMessage, socket: internal.Duplex) => {
+  
+  const parsedURL = new URL(req.url!, `http://${req.headers.host}`);
+
+  const token = parsedURL.searchParams.get('token');
+
+  if(!token) {
+    socket.write(`HTTP/1.1 401 Unauthorized\r\n\r\n`);
+    socket.destroy()
+    return false;
+  }
+
+  if(!await helpers.decodeToken(token)) return false;
+
+  return true;
+
+
+};
+
 const helpers: Helpers = {
   decodeToken,
   getUser,
@@ -122,6 +157,8 @@ const helpers: Helpers = {
   getAllUsers,
   createFriendRequest,
   getFriendRequest,
+  deleteFriendRequest,
+  socketAuthentication,
 };
 
 export default helpers;

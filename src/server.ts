@@ -18,26 +18,45 @@ const PORT = process.env.PORT || 3001;
 
 const server = http.createServer(app);
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ noServer: true });
+
+const onSocketError = (err:Error) => {
+  console.log(`[SOCKET_UPGRADE]: ${err}`);
+  process.exit(1);
+}
 
 server.on("upgrade", (req, socket, head) => {
-  if (req.url?.includes("/chat"))
-    wss.handleUpgrade(req, socket, head, function (ws) {
+
+  if (!req.url?.includes("/chat")) return;
+
+  // listen for socket errors
+  socket.on('error', onSocketError);
+
+    wss.handleUpgrade(req, socket, head, async function (ws) {
+      // authentication
+     if(!await helpers.socketAuthentication(req, socket)) return;
+
+      socket.removeListener("error", onSocketError);
+
       wss.emit("connection", ws, req);
+
     });
 });
 
 wss.on("connection", async (ws: WebSocketExt, req) => {
-  // assigning connection id to ws
-  const socket_id = uuidv4();
+  console.log("connected");
 
-  //token sent from the client
-  const token = "";
+  const parsedURL = new URL(req.url!, `http://${req.headers.host}`);
+
+  const token = parsedURL.searchParams.get("token")!;
 
   // decode token to get user info
   const decoded = (await helpers.decodeToken(token)) as DecodedIdToken;
 
   const { uid, email } = decoded; // get user props
+
+  // assigning connection id to ws
+  const socket_id = uuidv4();
 
   // search for user
   let user = await helpers.getUser(uid);
@@ -64,7 +83,6 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
 
     // check if the recipient is among the user who are online.
     wss.clients.forEach(async (_client) => {
-
       const client = _client as WebSocketExt;
 
       if (client.id === data.to) {
@@ -74,51 +92,60 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
 
         // create a new friend request
         const new_friend_request: NewFriendRequest = {
-          recipient : recipient.userId,
-          sender : sender!.userId,
+          recipient: recipient.userId,
+          sender: sender!.userId,
         };
 
         // save the request to friend_request collection
         helpers.createFriendRequest(new_friend_request);
 
         // notify the recipient
-        client.send(JSON.stringify({message: "New Friend Request"}));
+        client.send(JSON.stringify({ message: "New Friend Request" }));
 
         // emit new_friend_request so that we can log/save its details
         // client.emit("new_friend_request", new_friend_request);
       }
 
-      if(client.id === data.from) {
-
-        client.send(JSON.stringify({message: "Friend Request sent"}));
-        
-      }
-
-
+      // notify the sender
+      if (client.id === data.from)
+        client.send(JSON.stringify({ message: "Friend Request sent" }));
     });
   });
 
-
-  ws.on(SocketEvents.ACCEPT_FRIEND_REQUEST,async (id:string) => {
-
+  ws.on(SocketEvents.ACCEPT_FRIEND_REQUEST, async (id: string) => {
     // search for friend request with that id
-    const _friendRequest = await helpers.getFriendRequest(id) as FirebaseFirestore.DocumentData;
+    const _friendRequest = (await helpers.getFriendRequest(
+      id
+    )) as FirebaseFirestore.DocumentData;
 
-    const { sender, recipient } = _friendRequest; 
+    const { sender, recipient } = _friendRequest;
 
     // update the sender & recipient friends array;
 
     await helpers.updateUser(sender, {
-      friends: [recipient]
-    })
+      friends: [recipient],
+    });
 
     // add sender as a friend of the recipient
     await helpers.updateUser(recipient, {
-      friends: [sender]
+      friends: [sender],
     });
-     
-  });
 
+    // here u can remove the friend request from the DB
+    await helpers.deleteFriendRequest(id);
+
+    // notify the sender that the request is accepted
+    wss.clients.forEach(async (_client) => {
+      const client = _client as WebSocketExt;
+
+      // look up the sender
+      const _sender = await helpers.getUser(sender)!;
+
+      // send a notification
+      if (client.id === _sender!.socket_id)
+        return client.send(JSON.stringify({ message: "Request accepted" }));
+    });
+  });
 });
 
 // listening
