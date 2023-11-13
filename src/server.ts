@@ -13,6 +13,7 @@ import helpers from "./helpers";
 import { DecodedIdToken } from "firebase-admin/auth";
 import SocketEvents from "./types/socket_events";
 import FriendRequest, { NewFriendRequest } from "./types/friend_request";
+import { Timestamp } from "firebase-admin/firestore";
 
 const PORT = process.env.PORT || 3001;
 
@@ -34,7 +35,7 @@ server.on("upgrade", (req, socket, head) => {
 
     wss.handleUpgrade(req, socket, head, async function (ws) {
       // authentication
-     if(!await helpers.socketAuthentication(req, socket)) return;
+     if(!(await helpers.socketAuthentication(req, socket))) return;
 
       socket.removeListener("error", onSocketError);
 
@@ -44,7 +45,6 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 wss.on("connection", async (ws: WebSocketExt, req) => {
-  console.log("connected");
 
   const parsedURL = new URL(req.url!, `http://${req.headers.host}`);
 
@@ -58,6 +58,8 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
   // assigning connection id to ws
   const socket_id = uuidv4();
 
+  console.log('socket_id: ', socket_id);
+
   // search for user
   let user = await helpers.getUser(uid);
 
@@ -67,6 +69,7 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
       socket_id,
       email: email as string,
       userId: uid,
+      friends: []
     });
   // update socket_id of the user if he exists
   else await helpers.updateUser(uid, { socket_id });
@@ -94,6 +97,7 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
         const new_friend_request: NewFriendRequest = {
           recipient: recipient.userId,
           sender: sender!.userId,
+          createdAt: Timestamp.now(),
         };
 
         // save the request to friend_request collection

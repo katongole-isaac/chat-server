@@ -28,16 +28,16 @@ app.use(
   cors({
     credentials: true,
     origin: "*",
-    methods: allowMethods
+    methods: allowMethods,
   })
-);
+);   
 
 app.use(express.json({ limit: "10kb" }));
 app.use(helmet()); // provide or add more response headers for security
 app.use(rateLimiter); // rate limiting
 
 // routes
-app.use('/get-users', userRouter);
+app.use("/users", userRouter);
 
 //logging only in dev mode
 if (process.env.NODE_ENV === "development") app.use(morgan("dev"));

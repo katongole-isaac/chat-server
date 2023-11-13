@@ -3,6 +3,8 @@
  *
  */
 
+import { Timestamp } from "firebase-admin/firestore";
+
 export default interface FriendRequest {
   /**
    * Recipient id
@@ -18,5 +20,9 @@ export default interface FriendRequest {
 export interface NewFriendRequest {
   readonly sender: string;
   readonly recipient: string;
-//   createdAt: date ; the date is used when saving the document in DB
+  
+  /**
+   * Denotes the date when the request was created
+   */
+  readonly createdAt: Timestamp ; 
 }
