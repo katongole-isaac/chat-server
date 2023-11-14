@@ -1,5 +1,6 @@
 import { NextFunction, Response, Request } from "express";
-import helpers from "../helpers";
+import utils from "../utils";
+
 
 export default async function (req:Request, res: Response, next: NextFunction) {
 
@@ -8,7 +9,7 @@ export default async function (req:Request, res: Response, next: NextFunction) {
 
     const [_, token] = authToken.split(' ');
 
-    const decoded = await helpers.decodeToken(token);
+    const decoded = await utils.decodeToken(token);
 
     if(!decoded) return res.status(401).send({error: "Invalid token provided"});
 

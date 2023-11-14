@@ -6,20 +6,24 @@
 import http from "node:http";
 import { WebSocketServer } from "ws";
 import { v4 as uuidv4 } from "uuid";
+import { Timestamp } from "firebase-admin/firestore";
+import { DecodedIdToken } from "firebase-admin/auth";
 
 import app from "./app";
-import WebSocketExt from "./types/websocket";
-import helpers from "./helpers";
-import { DecodedIdToken } from "firebase-admin/auth";
-import SocketEvents from "./types/socket_events";
-import FriendRequest, { NewFriendRequest } from "./types/friend_request";
-import { Timestamp } from "firebase-admin/firestore";
+import utils from "./utils";
+import user from "./utils/user";
+import { SocketEvents } from "./types";
+import socketUtils from "./utils/socket";
+import { WebSocketExt } from "../websocket";
+import friendRequest, {FriendRequest, NewFriendRequest} from "./utils/friendRequest";
+
+
 
 const PORT = process.env.PORT || 3001;
 
 const server = http.createServer(app);
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true });  
 
 const onSocketError = (err:Error) => {
   console.log(`[SOCKET_UPGRADE]: ${err}`);
@@ -35,7 +39,7 @@ server.on("upgrade", (req, socket, head) => {
 
     wss.handleUpgrade(req, socket, head, async function (ws) {
       // authentication
-     if(!(await helpers.socketAuthentication(req, socket))) return;
+     if(!(await socketUtils.authenticate(req, socket))) return;
 
       socket.removeListener("error", onSocketError);
 
@@ -51,7 +55,7 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
   const token = parsedURL.searchParams.get("token")!;
 
   // decode token to get user info
-  const decoded = (await helpers.decodeToken(token)) as DecodedIdToken;
+  const decoded = (await utils.decodeToken(token)) as DecodedIdToken;
 
   const { uid, email } = decoded; // get user props
 
@@ -61,26 +65,27 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
   console.log('socket_id: ', socket_id);
 
   // search for user
-  let user = await helpers.getUser(uid);
+  let _user = await user.get(uid);
 
-  // create ther user if doesn't exist in DB
-  if (!user)
-    await helpers.saveUser(uid, {
+  // create the user if doesn't exist in DB
+  if (!_user)
+    await user.create(uid, {
       socket_id,
       email: email as string,
       userId: uid,
       friends: []
     });
   // update socket_id of the user if he exists
-  else await helpers.updateUser(uid, { socket_id });
+  else await user.update(uid, { socket_id });
 
   // set socket_id to ws
   ws.id = socket_id;
+  
 
   // register event handler or listeners
   ws.on(SocketEvents.FRIEND_REQUEST, async (data: FriendRequest) => {
     // look up the recipient id
-    const recipient = await helpers.getUser(data.to);
+    const recipient = await user.get(data.to);
 
     if (!recipient) return;
 
@@ -91,7 +96,7 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
       if (client.id === data.to) {
         // here you've got the recipient
 
-        const sender = await helpers.getUser(data.from);
+        const sender = await user.get(data.from);
 
         // create a new friend request
         const new_friend_request: NewFriendRequest = {
@@ -101,7 +106,7 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
         };
 
         // save the request to friend_request collection
-        helpers.createFriendRequest(new_friend_request);
+        friendRequest.create(new_friend_request);
 
         // notify the recipient
         client.send(JSON.stringify({ message: "New Friend Request" }));
@@ -118,7 +123,7 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
 
   ws.on(SocketEvents.ACCEPT_FRIEND_REQUEST, async (id: string) => {
     // search for friend request with that id
-    const _friendRequest = (await helpers.getFriendRequest(
+    const _friendRequest = (await friendRequest.get(
       id
     )) as FirebaseFirestore.DocumentData;
 
@@ -126,24 +131,24 @@ wss.on("connection", async (ws: WebSocketExt, req) => {
 
     // update the sender & recipient friends array;
 
-    await helpers.updateUser(sender, {
+    await user.update(sender, {
       friends: [recipient],
     });
 
     // add sender as a friend of the recipient
-    await helpers.updateUser(recipient, {
+    await user.update(recipient, {
       friends: [sender],
     });
 
     // here u can remove the friend request from the DB
-    await helpers.deleteFriendRequest(id);
+    await friendRequest.delete(id);
 
     // notify the sender that the request is accepted
     wss.clients.forEach(async (_client) => {
       const client = _client as WebSocketExt;
 
       // look up the sender
-      const _sender = await helpers.getUser(sender)!;
+      const _sender = await user.get(sender)!;
 
       // send a notification
       if (client.id === _sender!.socket_id)
