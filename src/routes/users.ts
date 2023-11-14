@@ -4,7 +4,6 @@ import user from "../utils/user";
 import auth from "../middleware/auth";
 import friendRequest from "../utils/friendRequest";
 
-
 const router = Router();
 
 //getting users

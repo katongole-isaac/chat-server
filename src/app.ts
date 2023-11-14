@@ -4,6 +4,7 @@
  */
 import express, { Application } from "express";
 import { rateLimit,  } from "express-rate-limit";
+import 'express-async-errors';
 import morgan from "morgan";
 import helmet from "helmet";
 import xss from "xss";
@@ -40,7 +41,8 @@ app.use(rateLimiter); // rate limiting
 app.use("/users", userRouter);
 
 //logging only in dev mode
-if (process.env.NODE_ENV === "development") app.use(morgan("dev"));
+if (process.env.NODE_ENV === "development") app.use(morgan("tiny"));
+
 
 
 export default app;
